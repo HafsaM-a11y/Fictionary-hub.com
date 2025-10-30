@@ -1,0 +1,190 @@
+
+import React, { useEffect, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { base44 } from "@/api/base44Client";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { BookOpen, ShoppingCart, ChevronDown, ChevronUp } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import BookCard from "../components/home/BookCard";
+
+export default function Book() {
+  const [bookId, setBookId] = useState(null);
+  const [showAuthorNote, setShowAuthorNote] = useState(false);
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    setBookId(urlParams.get('id'));
+  }, []);
+
+  const { data: book, isLoading } = useQuery({
+    queryKey: ['book', bookId],
+    queryFn: async () => {
+      const books = await base44.entities.Book.list();
+      return books.find(b => b.id === bookId);
+    },
+    enabled: !!bookId,
+  });
+
+  const { data: similarBooks } = useQuery({
+    queryKey: ['similar', book?.genre, book?.author],
+    queryFn: () => base44.entities.Book.filter({ genre: book.genre }, '-sales_count', 4),
+    enabled: !!book,
+    initialData: [],
+  });
+
+  const addToCart = () => {
+    const cart = JSON.parse(localStorage.getItem('cart') || '[]');
+    if (!cart.find(item => item.id === book.id)) {
+      cart.push(book);
+      localStorage.setItem('cart', JSON.stringify(cart));
+      window.dispatchEvent(new Event('cartUpdated'));
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid md:grid-cols-5 gap-8">
+            <div className="md:col-span-2">
+              <Skeleton className="aspect-[2/3] rounded-lg w-full" />
+            </div>
+            <div className="md:col-span-3 space-y-4">
+              <Skeleton className="h-12 w-3/4" />
+              <Skeleton className="h-6 w-1/2" />
+              <Skeleton className="h-32 w-full" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!book) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-xl text-[#8B7355]">Book not found</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8 bg-[#F5F1EB]">
+      <div className="max-w-6xl mx-auto">
+        <div className="grid md:grid-cols-5 gap-8 mb-16">
+          <div className="md:col-span-2">
+            <Card className="overflow-hidden sticky top-24 bg-white border-[#EDE6DB]">
+              <div className="aspect-[2/3] bg-[#EDE6DB]">
+                {book.cover_image_url ? (
+                  <img
+                    src={book.cover_image_url}
+                    alt={book.title}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <BookOpen className="w-32 h-32 text-[#8B7355] opacity-30" />
+                  </div>
+                )}
+              </div>
+            </Card>
+          </div>
+
+          <div className="md:col-span-3">
+            <div className="bg-white rounded-xl p-8 shadow-lg border border-[#EDE6DB]">
+              <Badge className="mb-4 bg-[#C4A57B] text-white">
+                {book.genre}
+              </Badge>
+              
+              <h1 className="text-4xl md:text-5xl font-bold text-[#4A4238] mb-3">
+                {book.title}
+              </h1>
+              
+              <p className="text-xl text-[#6B5744] mb-6">
+                by {book.author}
+              </p>
+
+              {book.series && (
+                <p className="text-base text-[#8B6F47] mb-4">
+                  Part {book.series_order || 1} of the <span className="font-semibold">{book.series}</span> series
+                </p>
+              )}
+
+              <div className="mb-8">
+                <p className="text-lg text-[#4A4238] leading-relaxed">
+                  {book.description}
+                </p>
+              </div>
+
+              {book.author_note && (
+                <div className="mb-8 border-t border-[#EDE6DB] pt-6">
+                  <button
+                    onClick={() => setShowAuthorNote(!showAuthorNote)}
+                    className="flex items-center gap-2 text-[#8B6F47] hover:text-[#6B5744] font-medium mb-3"
+                  >
+                    <span>Why the author wrote this book</span>
+                    {showAuthorNote ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {showAuthorNote && (
+                    <p className="text-[#6B5744] italic pl-4 border-l-2 border-[#C4A57B]">
+                      {book.author_note}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center gap-6 mb-8 pb-8 border-b border-[#EDE6DB]">
+                <div>
+                  <p className="text-sm text-[#6B5744] mb-1">Price</p>
+                  <p className="text-4xl font-bold text-[#8B6F47]">
+                    ${book.price?.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-4">
+                <Button
+                  size="lg"
+                  onClick={addToCart}
+                  className="flex-1 bg-[#8B6F47] hover:bg-[#6B5744] text-white rounded-full h-14 text-lg"
+                >
+                  <ShoppingCart className="w-5 h-5 mr-2" />
+                  Add to Cart
+                </Button>
+                <Link to={createPageUrl("Cart")} className="flex-1">
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="w-full border-[#8B6F47] text-[#8B6F47] hover:bg-[#8B6F47] hover:text-white rounded-full h-14 text-lg"
+                  >
+                    Go to Cart
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {similarBooks.length > 0 && (
+          <div className="bg-white rounded-xl p-8 shadow-lg border border-[#E8E0D5]">
+            <h2 className="text-3xl font-bold text-[#374151] mb-6">
+              You Might Also Like
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {similarBooks
+                .filter(b => b.id !== book.id)
+                .slice(0, 4)
+                .map((similarBook) => (
+                  <BookCard key={similarBook.id} book={similarBook} />
+                ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
